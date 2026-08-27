@@ -32,12 +32,20 @@ page = st.sidebar.radio(
 # LOAD CLEANED DATA
 # ============================================================
 import os
+import sqlite3
 import pandas as pd
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-csv_path = os.path.join(BASE_DIR, "cleaned_bird_data.csv")
+db_path = os.path.join(BASE_DIR, "bird_monitoring.db")
 
-df_clean = pd.read_csv(csv_path)
+conn = sqlite3.connect(db_path)
+
+df_clean = pd.read_sql_query(
+    "SELECT * FROM bird_observations",
+    conn
+) 
+
+conn.close()
 
 
 # ============================================================
