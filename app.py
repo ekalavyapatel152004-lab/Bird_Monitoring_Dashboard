@@ -44,7 +44,7 @@ df_clean = pd.read_sql_query(
     "SELECT * FROM bird_observations",
     conn
 ) 
-
+st.write("DEBUG - Rows loaded from SQLite:", len(df_clean))
 conn.close()
 
 
