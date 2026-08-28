@@ -1,8 +1,8 @@
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import plotly.io as pio
 
 st.set_page_config(
     page_title="Bird Species Observation Analysis",
@@ -10,7 +10,194 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🐦 Bird Species Observation Analysis Dashboard")
+# ============================================================
+# COLOR PALETTE
+# ============================================================
+# A cool indigo/rose palette (no greens or oranges): deep indigo
+# for Forest, rose/magenta for Grassland, plus violet and sky-blue
+# accents for single-series charts. Used everywhere below.
+
+FOREST_COLOR = "#4C6EF5"      # indigo blue
+FOREST_LIGHT = "#A5B4FC"      # soft indigo (tints / hover)
+GRASSLAND_COLOR = "#E64980"   # rose / magenta
+GRASSLAND_LIGHT = "#FBB1C7"   # soft rose (tints / hover)
+ACCENT_COLOR = "#7C3AED"      # violet — generic single-series charts
+ACCENT_COLOR_2 = "#0EA5E9"    # sky blue — secondary accent
+ACCENT_COLOR_3 = "#14B8A6"    # teal — tertiary accent
+
+HABITAT_COLORS = {
+    "Forest": FOREST_COLOR,
+    "Grassland": GRASSLAND_COLOR
+}
+
+# ============================================================
+# GLOBAL STYLE — page background, fonts, KPI cards, sidebar
+# ============================================================
+
+st.markdown(f"""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+    html, body, [class*="css"] {{
+        font-family: 'Poppins', sans-serif;
+    }}
+
+    /* Page background */
+    [data-testid="stAppViewContainer"] {{
+        background: linear-gradient(160deg, #F5F6FE 0%, #EEF1FD 45%, #FDF1F6 100%);
+    }}
+
+    [data-testid="stHeader"] {{
+        background: rgba(0,0,0,0);
+    }}
+
+    /* Sidebar */
+    [data-testid="stSidebar"] {{
+        background: linear-gradient(180deg, #3B4CCA 0%, #6A2C91 100%);
+    }}
+    [data-testid="stSidebar"] * {{
+        color: #F5F3FF !important;
+    }}
+    [data-testid="stSidebar"] .stRadio label,
+    [data-testid="stSidebar"] .stMultiSelect label {{
+        color: #F5F3FF !important;
+        font-weight: 500;
+    }}
+    [data-testid="stSidebar"] [data-baseweb="tag"] {{
+        background-color: {GRASSLAND_COLOR} !important;
+    }}
+
+    /* Dashboard title banner */
+    .dashboard-title {{
+        background: linear-gradient(90deg, {FOREST_COLOR} 0%, {ACCENT_COLOR} 55%, {GRASSLAND_COLOR} 100%);
+        padding: 1.4rem 1.8rem;
+        border-radius: 16px;
+        color: white;
+        margin-bottom: 1.4rem;
+        box-shadow: 0 8px 20px rgba(76, 110, 245, 0.25);
+    }}
+    .dashboard-title h1 {{
+        color: white !important;
+        margin: 0;
+        font-weight: 700;
+        font-size: 2rem;
+    }}
+    .dashboard-title p {{
+        color: #F1EEFD;
+        margin: 0.3rem 0 0 0;
+        font-size: 0.95rem;
+    }}
+
+    /* Section headers inside pages */
+    h2, h3 {{
+        color: #2E2A5E !important;
+        font-weight: 600 !important;
+    }}
+
+    /* KPI cards */
+    .kpi-row {{
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }}
+    .kpi-card {{
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 96px;
+        border-radius: 16px;
+        padding: 1rem 1rem;
+        background: var(--secondary-background-color, #FFFFFF);
+        box-shadow: 0 6px 16px rgba(46, 42, 94, 0.10);
+        border: 2px solid var(--kpi-color, {ACCENT_COLOR});
+        border-left: 7px solid var(--kpi-color, {ACCENT_COLOR});
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.7rem;
+        overflow: hidden;
+    }}
+    .kpi-card:hover {{
+        transform: translateY(-3px);
+        box-shadow: 0 10px 20px rgba(46, 42, 94, 0.16);
+    }}
+    .kpi-icon-badge {{
+        flex-shrink: 0;
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--kpi-color, {ACCENT_COLOR}) 18%, transparent);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+    }}
+    .kpi-text {{
+        min-width: 0;
+    }}
+    .kpi-label {{
+        font-size: 0.74rem;
+        font-weight: 500;
+        color: var(--text-color, #6B7280);
+        opacity: 0.75;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        margin-bottom: 0.1rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }}
+    .kpi-value {{
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: var(--text-color, #2E2A5E);
+        line-height: 1.1;
+    }}
+
+    /* Chart containers */
+    [data-testid="stPlotlyChart"] {{
+        background: #FFFFFF;
+        border-radius: 16px;
+        padding: 0.8rem;
+        box-shadow: 0 4px 14px rgba(46, 42, 94, 0.06);
+        margin-bottom: 1rem;
+    }}
+
+    /* Metric widget fallback styling (st.metric, if used) */
+    [data-testid="stMetric"] {{
+        background: #FFFFFF;
+        border-radius: 16px;
+        padding: 1rem;
+        box-shadow: 0 6px 16px rgba(46, 42, 94, 0.08);
+    }}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<div class="dashboard-title">
+    <h1>🐦 Bird Species Observation Analysis Dashboard</h1>
+    <p>Exploring bird monitoring data across Forest and Grassland habitats</p>
+</div>
+""", unsafe_allow_html=True)
+
+# ============================================================
+# GLOBAL PLOTLY THEME
+# ============================================================
+# One shared template so every chart's background, fonts and
+# default colorway match the dashboard, without editing each
+# chart individually.
+
+pio.templates["bird_dashboard"] = pio.templates["plotly_white"]
+pio.templates["bird_dashboard"].layout.update(
+    font=dict(family="Poppins, sans-serif", size=13, color="#2E2A5E"),
+    title=dict(font=dict(size=18, color="#2E2A5E", family="Poppins, sans-serif")),
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    colorway=[ACCENT_COLOR, GRASSLAND_COLOR, FOREST_COLOR, ACCENT_COLOR_2, ACCENT_COLOR_3, GRASSLAND_LIGHT],
+    legend=dict(bgcolor="rgba(0,0,0,0)"),
+    xaxis=dict(gridcolor="#E7E5F5", zerolinecolor="#E7E5F5"),
+    yaxis=dict(gridcolor="#E7E5F5", zerolinecolor="#E7E5F5"),
+)
+pio.templates.default = "bird_dashboard"
 
 
 # ============================================================
@@ -31,20 +218,28 @@ page = st.sidebar.radio(
 # ============================================================
 # LOAD CLEANED DATA
 # ============================================================
+
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 import os
 import sqlite3
-import pandas as pd
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-db_path = os.path.join(BASE_DIR, "bird_monitoring.db")
+
+db_path = os.path.join(
+    BASE_DIR,
+    "bird_monitoring.db"
+)
 
 conn = sqlite3.connect(db_path)
 
-df_clean = pd.read_sql_query(
+df_clean = pd.read_sql(
     "SELECT * FROM bird_observations",
     conn
-) 
-st.write("DEBUG - Rows loaded from SQLite:", len(df_clean))
+)
+
 conn.close()
 
 
@@ -74,37 +269,30 @@ grassland_count = (
 st.markdown("## 📊 Key Metrics")
 st.caption("Summary of the current bird monitoring dataset")
 
-col1, col2, col3, col4, col5 = st.columns(5)
+kpi_cards = [
+    ("🔭", "Total Observations", f"{total_observations:,}", ACCENT_COLOR),
+    ("🐦", "Unique Bird Species", f"{unique_bird_species:,}", ACCENT_COLOR_2),
+    ("🏷️", "Common Names", f"{unique_common_names:,}", ACCENT_COLOR_3),
+    ("🌳", "Forest", f"{forest_count:,}", FOREST_COLOR),
+    ("🌻", "Grassland", f"{grassland_count:,}", GRASSLAND_COLOR),
+]
 
-with col1:
-    st.metric(
-        "Total Observations",
-        f"{total_observations:,}"
-    )
+kpi_cols = st.columns(5)
 
-with col2:
-    st.metric(
-        "Unique Bird Species",
-        f"{unique_bird_species:,}"
-    )
-
-with col3:
-    st.metric(
-        "Common Names",
-        f"{unique_common_names:,}"
-    )
-
-with col4:
-    st.metric(
-        "Forest",
-        f"{forest_count:,}"
-    )
-
-with col5:
-    st.metric(
-        "Grassland",
-        f"{grassland_count:,}"
-    )
+for col, (icon, label, value, color) in zip(kpi_cols, kpi_cards):
+    with col:
+        st.markdown(
+            f"""
+            <div class="kpi-card" style="--kpi-color: {color};">
+                <div class="kpi-icon-badge">{icon}</div>
+                <div class="kpi-text">
+                    <div class="kpi-label">{label}</div>
+                    <div class="kpi-value">{value}</div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
 
 # ============================================================
@@ -212,12 +400,13 @@ if page == "📊 Overview":
             "color": "Habitat"
         },
         color_discrete_map={
-            "Forest": "green",
-            "Grassland": "gold"
+            "Forest": FOREST_COLOR,
+            "Grassland": GRASSLAND_COLOR
         }
     )
 
     fig.update_traces(
+        cliponaxis=False,
         textposition="outside"
     )
 
@@ -249,12 +438,13 @@ if page == "📊 Overview":
             "Unique_Species": "Number of Unique Species"
         },
         color_discrete_map={
-            "Forest": "blue",
-            "Grassland": "orange"
+            "Forest": FOREST_COLOR,
+            "Grassland": GRASSLAND_COLOR
         }
     )
 
     fig.update_traces(
+        cliponaxis=False,
         textposition="outside"
     )
 
@@ -294,7 +484,8 @@ if page == "📊 Overview":
     )
 
     fig.update_traces(
-        marker_color="#1F77B4",
+        cliponaxis=False,
+        marker_color=ACCENT_COLOR,
         textposition="outside"
     )
 
@@ -352,13 +543,20 @@ if page == "🐦 Species Analysis":
         )
 
         fig_forest.update_traces(
-            marker_color="#1F77B4",
+            cliponaxis=False,
+            marker_color=FOREST_COLOR,
             textposition="outside"
         )
 
         fig_forest.update_layout(
             xaxis_title="Number of Observations",
-            yaxis_title="Bird Species"
+            yaxis_title="Bird Species",
+            height=480,
+            margin=dict(l=10, r=60, t=60, b=50)
+        )
+
+        fig_forest.update_xaxes(
+            automargin=True
         )
 
         st.plotly_chart(
@@ -378,13 +576,20 @@ if page == "🐦 Species Analysis":
         )
 
         fig_grassland.update_traces(
-            marker_color="#6BAED6",
+            cliponaxis=False,
+            marker_color=GRASSLAND_COLOR,
             textposition="outside"
         )
 
         fig_grassland.update_layout(
             xaxis_title="Number of Observations",
-            yaxis_title="Bird Species"
+            yaxis_title="Bird Species",
+            height=480,
+            margin=dict(l=10, r=60, t=60, b=50)
+        )
+
+        fig_grassland.update_xaxes(
+            automargin=True
         )
 
         st.plotly_chart(
@@ -420,7 +625,8 @@ if page == "🐦 Species Analysis":
     )
 
     fig.update_traces(
-        marker_color="#1F77B4",
+        cliponaxis=False,
+        marker_color=ACCENT_COLOR,
         textposition="outside"
     )
 
@@ -478,8 +684,8 @@ if page == "🐦 Species Analysis":
             "Habitat": "Habitat"
         },
         color_discrete_map={
-            "Forest": "#1565C0",
-            "Grassland": "#FFFFC5"
+            "Forest": FOREST_COLOR,
+            "Grassland": GRASSLAND_COLOR
         }
     )
 
@@ -558,12 +764,13 @@ if page == "🐦 Species Analysis":
             "Rare_Species": "Number of Rare Species"
         },
         color_discrete_map={
-            "Forest": "#1565C0",
-            "Grassland": "#64B5F6"
+            "Forest": FOREST_COLOR,
+            "Grassland": GRASSLAND_COLOR
         }
     )
 
     fig.update_traces(
+        cliponaxis=False,
         textposition="outside",
         textfont=dict(size=13),
         width=0.55
@@ -662,7 +869,8 @@ if page == "🐦 Species Analysis":
         )
 
         fig_forest.update_traces(
-            marker_color="#1565C0",
+            cliponaxis=False,
+            marker_color=FOREST_COLOR,
             textposition="outside",
             width=0.55,
             textfont=dict(size=9)
@@ -707,7 +915,8 @@ if page == "🐦 Species Analysis":
         )
 
         fig_grassland.update_traces(
-            marker_color="#64B5F6",
+            cliponaxis=False,
+            marker_color=GRASSLAND_COLOR,
             textposition="outside",
             width=0.55,
             textfont=dict(size=9)
@@ -780,12 +989,13 @@ if page == "🌦️ Environment & Behaviour":
             "Habitat": "Habitat"
         },
         color_discrete_map={
-            "Forest": "#1F77B4",
-            "Grassland": "#6BAED6"
+            "Forest": FOREST_COLOR,
+            "Grassland": GRASSLAND_COLOR
         }
     )
 
     fig.update_traces(
+        cliponaxis=False,
         textposition="outside"
     )
 
@@ -826,8 +1036,8 @@ if page == "🌦️ Environment & Behaviour":
             "Habitat": "Habitat"
         },
         color_discrete_map={
-            "Forest": "#1F77B4",
-            "Grassland": "#6BAED6"
+            "Forest": FOREST_COLOR,
+            "Grassland": GRASSLAND_COLOR
         }
     )
 
@@ -841,6 +1051,7 @@ if page == "🌦️ Environment & Behaviour":
     )
 
     fig.update_traces(
+        cliponaxis=False,
         textposition="outside",
         textfont_size=8
     )
@@ -875,8 +1086,8 @@ if page == "🌦️ Environment & Behaviour":
             "Habitat": "Habitat"
         },
         color_discrete_map={
-            "Forest": "#1F77B4",
-            "Grassland": "#6BAED6"
+            "Forest": FOREST_COLOR,
+            "Grassland": GRASSLAND_COLOR
         }
     )
 
@@ -885,6 +1096,7 @@ if page == "🌦️ Environment & Behaviour":
     )
 
     fig.update_traces(
+        cliponaxis=False,
         textposition="outside"
     )
 
@@ -918,8 +1130,8 @@ if page == "🌦️ Environment & Behaviour":
             "Habitat": "Habitat"
         },
         color_discrete_map={
-            "Forest": "#1F77B4",
-            "Grassland": "#6BAED6"
+            "Forest": FOREST_COLOR,
+            "Grassland": GRASSLAND_COLOR
         }
     )
 
@@ -928,6 +1140,7 @@ if page == "🌦️ Environment & Behaviour":
     )
 
     fig.update_traces(
+        cliponaxis=False,
         textposition="outside"
     )
 
@@ -961,8 +1174,8 @@ if page == "🌦️ Environment & Behaviour":
             "Habitat": "Habitat"
         },
         color_discrete_map={
-            "Forest": "#1F77B4",
-            "Grassland": "#6BAED6"
+            "Forest": FOREST_COLOR,
+            "Grassland": GRASSLAND_COLOR
         }
     )
 
@@ -971,6 +1184,7 @@ if page == "🌦️ Environment & Behaviour":
     )
 
     fig.update_traces(
+        cliponaxis=False,
         textposition="outside"
     )
 
@@ -1008,8 +1222,8 @@ if page == "🌦️ Environment & Behaviour":
             "Habitat": "Habitat"
         },
         color_discrete_map={
-            "Forest": "#1F77B4",
-            "Grassland": "#6BAED6"
+            "Forest": FOREST_COLOR,
+            "Grassland": GRASSLAND_COLOR
         }
     )
 
@@ -1018,6 +1232,7 @@ if page == "🌦️ Environment & Behaviour":
     )
 
     fig.update_traces(
+        cliponaxis=False,
         textposition="outside"
     )
 
@@ -1051,8 +1266,8 @@ if page == "🌦️ Environment & Behaviour":
             "Habitat": "Habitat"
         },
         color_discrete_map={
-            "Forest": "#1F77B4",
-            "Grassland": "#6BAED6"
+            "Forest": FOREST_COLOR,
+            "Grassland": GRASSLAND_COLOR
         }
     )
 
@@ -1061,6 +1276,7 @@ if page == "🌦️ Environment & Behaviour":
     )
 
     fig.update_traces(
+        cliponaxis=False,
         textposition="outside",
         textfont_size=9
     )
@@ -1115,12 +1331,13 @@ if page == "🌦️ Environment & Behaviour":
             "Habitat": "Habitat"
         },
         color_discrete_map={
-            "Forest": "#1F77B4",
-            "Grassland": "#6BAED6"
+            "Forest": FOREST_COLOR,
+            "Grassland": GRASSLAND_COLOR
         }
     )
 
     fig.update_traces(
+        cliponaxis=False,
         textposition="outside"
     )
 
@@ -1173,12 +1390,13 @@ if page == "🌦️ Environment & Behaviour":
             "Habitat": "Habitat"
         },
         color_discrete_map={
-            "Forest": "#1F77B4",
-            "Grassland": "#6BAED6"
+            "Forest": FOREST_COLOR,
+            "Grassland": GRASSLAND_COLOR
         }
     )
 
     fig.update_traces(
+        cliponaxis=False,
         textposition="outside"
     )
 
@@ -1221,7 +1439,8 @@ if page == "👥 Observer & Conservation":
     )
 
     fig.update_traces(
-        marker_color="#1F77B4",
+        cliponaxis=False,
+        marker_color=ACCENT_COLOR,
         textposition="outside"
     )
 
@@ -1259,7 +1478,8 @@ if page == "👥 Observer & Conservation":
     )
 
     fig.update_traces(
-        marker_color="#1F77B4",
+        cliponaxis=False,
+        marker_color=ACCENT_COLOR,
         textposition="outside"
     )
 
@@ -1297,7 +1517,7 @@ if page == "👥 Observer & Conservation":
     )
 
     fig.update_traces(
-        line_color="#1F77B4",
+        line_color=ACCENT_COLOR,
         line_width=3,
         marker_size=9,
         textposition="top center"
@@ -1446,4 +1666,3 @@ if page == "👥 Observer & Conservation":
     st.subheader(
         "Regional Stewardship Status by Habitat"
     )
-
